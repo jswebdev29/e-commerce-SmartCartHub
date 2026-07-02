@@ -1,16 +1,19 @@
 <?php
 session_start();
 
-// DB connection
-$conn = new mysqli('localhost', 'root', '', 'ecommerce_db');
-if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
+require_once __DIR__ . '/../connectfinity.php';
+
+if (!isset($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
 // Initialize tracking
-if (!isset($_SESSION['failed_attempts'])) $_SESSION['failed_attempts'] = 0;
-if (!isset($_SESSION['first_attempt_time'])) $_SESSION['first_attempt_time'] = time();
-if (!isset($_SESSION['block_time'])) $_SESSION['block_time'] = 0;
+if (!isset($_SESSION['failed_attempts']))
+    $_SESSION['failed_attempts'] = 0;
+if (!isset($_SESSION['first_attempt_time']))
+    $_SESSION['first_attempt_time'] = time();
+if (!isset($_SESSION['block_time']))
+    $_SESSION['block_time'] = 0;
 
 $error = "";
 $blocked = false;
@@ -22,6 +25,16 @@ if (time() - $_SESSION['block_time'] < 30) {
     $remainingTime = 30 - (time() - $_SESSION['block_time']);
     $error = "Too many failed attempts. Try again in $remainingTime seconds.";
 } elseif ($_SERVER["REQUEST_METHOD"] == "POST") {
+    if (
+        !isset($_POST['csrf_token']) ||
+        !hash_equals(
+            $_SESSION['csrf_token'],
+            $_POST['csrf_token']
+        )
+    ) {
+        die("Invalid CSRF token");
+    }
+
     $username = trim($_POST["username"]) ?? '';
     $password = trim($_POST["password"]) ?? '';
     $userCaptcha = trim($_POST["captchaCode"]) ?? '';
@@ -30,35 +43,59 @@ if (time() - $_SESSION['block_time'] < 30) {
     if ($userCaptcha !== $realCaptcha) {
         $error = "Captcha does not match!";
     } else {
-        $sql = "SELECT * FROM login_owner WHERE (username = '$username' OR email = '$username') AND password = '$password' LIMIT 1";
-        $result = $conn->query($sql);
+        $stmt = $conn->prepare("
+    SELECT * FROM login_owner
+    WHERE username = ? OR email = ?
+    LIMIT 1
+");
+
+        $stmt->bind_param("ss", $username, $username);
+        $stmt->execute();
+
+        $result = $stmt->get_result();
 
         if ($result && $result->num_rows > 0) {
-            // Reset counters on success
-            $_SESSION['failed_attempts'] = 0;
-            $_SESSION['first_attempt_time'] = time();
-            $_SESSION['block_time'] = 0;
 
-            $_SESSION["username"] = $username;
-            header("Location: dashboard.php");
-            exit();
-        } else {
-            // Wrong password handling
-            if (time() - $_SESSION['first_attempt_time'] > 30) {
-                $_SESSION['failed_attempts'] = 1;
+            $row = $result->fetch_assoc();
+
+            // VERIFY HASHED PASSWORD
+            if (password_verify($password, $row['password'])) {
+
+                $_SESSION['failed_attempts'] = 0;
                 $_SESSION['first_attempt_time'] = time();
+                $_SESSION['block_time'] = 0;
+
+                session_regenerate_id(true);
+
+                $_SESSION["admin_username"] = $row['username'];
+
+                // Auto logout timer start
+                $_SESSION['LOGIN_TIME_ADMIN'] = time();
+
+                header("Location: dashboard.php");
+                exit();
             } else {
-                $_SESSION['failed_attempts']++;
-                if ($_SESSION['failed_attempts'] >= 2) {
-                    $_SESSION['block_time'] = time();
-                    $blocked = true;
-                    $remainingTime = 30;
+                // WRONG PASSWORD
+                if (time() - $_SESSION['first_attempt_time'] > 30) {
+                    $_SESSION['failed_attempts'] = 1;
+                    $_SESSION['first_attempt_time'] = time();
+                } else {
+                    $_SESSION['failed_attempts']++;
+                    if ($_SESSION['failed_attempts'] >= 2) {
+                        $_SESSION['block_time'] = time();
+                        $blocked = true;
+                        $remainingTime = 30;
+                        $error = "";
+                    }
+                }
+
+                if (!$blocked && !$error) {
+                    $error = "Invalid username or password!";
                 }
             }
 
-            if (!$blocked && !$error) {
-                $error = "Invalid username or password!";
-            }
+        } else {
+            $error = "Invalid username or password!";
         }
     }
 }
@@ -69,6 +106,8 @@ if (time() - $_SESSION['block_time'] < 30) {
 
 <head>
     <title>Login</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.0/css/all.min.css" />
 
     <style>
@@ -76,21 +115,23 @@ if (time() - $_SESSION['block_time'] < 30) {
             font-family: Arial, sans-serif;
             margin: 0;
             background: linear-gradient(319deg, #446f91, #008eff);
-            height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            min-height: 100vh;
+            /* display: flex; */
+            /* justify-content: center;
+            align-items: center; */
+            overflow-x: hidden;
         }
 
         .login-card {
             position: relative;
-            padding: 30px 40px;
+            padding: 30px 50px;
             width: 300px;
             text-align: center;
             border-radius: 12px;
             background: conic-gradient(#ff0000, #00ff00, #0000ff, #ffff00, #ff0000);
             overflow: hidden;
             z-index: 1;
+            margin: 60px auto;
         }
 
         .login-card::before {
@@ -114,7 +155,7 @@ if (time() - $_SESSION['block_time'] < 30) {
             right: 4px;
             bottom: 4px;
             border-radius: 10px;
-            background: #007de1;
+            background: #1386e2;
             z-index: -1;
         }
 
@@ -131,7 +172,7 @@ if (time() - $_SESSION['block_time'] < 30) {
         .login-card h2 {
             margin-top: 10px;
             color: rgb(134, 4, 4);
-            font-size: 30px;
+            font-size: 40px;
         }
 
         .error {
@@ -147,8 +188,8 @@ if (time() - $_SESSION['block_time'] < 30) {
             border-bottom: 2px solid black;
             color: white;
             background-color: transparent;
-            width: 90%;
-            padding: 10px 10px 10px 35px;
+            width: 80%;
+            padding: 15px 15px 15px 40px;
             margin: 8px 0;
             font-size: 18px;
             border-radius: 5px;
@@ -261,24 +302,111 @@ if (time() - $_SESSION['block_time'] < 30) {
         .forgot-link a:hover {
             text-decoration: underline;
         }
+
+        /* ----------------------------------------- */
+
+        /* MOBILE */
+        @media screen and (max-width: 576px) {
+
+            body {
+                display: block;
+                min-height: auto;
+                padding: 0;
+                margin: 0;
+            }
+
+            .login-card {
+                width: calc(100% - 80px);
+                margin: 30px 40px 200px 40px;
+                padding: 25px 20px;
+                height: auto;
+                box-sizing: border-box;
+            }
+
+            .login-card h2 {
+                margin: 5px;
+                font-size: 32px;
+            }
+
+            input {
+                width: 100%;
+                box-sizing: border-box;
+                padding: 15px 15px 15px 40px;
+                margin: 2px 0;
+                font-size: 16px;
+            }
+
+            .captcha-container {
+                margin: 2px 0;
+                /* flex-direction: column; */
+            }
+
+            #captcha {
+                box-sizing: border-box;
+                letter-spacing: 5px;
+            }
+
+            #refreshBtn {
+                margin-left: 0;
+            }
+
+            input[type="submit"],
+            input[type="reset"] {
+                margin: 8px 0;
+                margin: 6px;
+            }
+        }
     </style>
 </head>
 
 <body>
+
     <div class="login-card">
         <h2><i class="fa-solid fa-circle-user"></i> Login</h2>
-        <?php if ($error) echo "<p class='error'>$error</p>"; ?>
-        <?php if ($blocked) echo "<p id='timer'>Try again in $remainingTime seconds</p>"; ?>
+        <?php if (isset($_GET['timeout'])) { ?>
+            <p style="
+        color:white;
+        background:red;
+        font-size:12px;
+        padding:8px;
+        border-radius:6px;
+        text-align:center;
+        font-weight:bold;
+        margin-bottom:10px;
+    ">
+                Session expired. Please login again.
+            </p>
+        <?php } ?>
+
+        <!-- <?php if (!empty($_GET['timeout'])) { ?>
+            <div class="alert alert-danger text-center">
+                Session expired. Please login again.
+            </div>
+        <?php } ?> -->
+
+        <?php
+        if ($error) {
+            echo "<p class='error'>" . htmlspecialchars($error) . "</p>";
+        }
+
+        if ($blocked) {
+            echo "<p id='timer'>Try again in $remainingTime seconds</p>";
+        }
+        ?>
 
         <form method="post" id="loginForm">
+            <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
+
             <div class="input-container">
                 <i class="fa-solid fa-user"></i>
-                <input type="text" name="username" placeholder="Enter Username or Email" required <?php if($blocked) echo "disabled"; ?>>
+                <input type="text" name="username" placeholder="Enter Username or Email" required <?php if ($blocked)
+                    echo "disabled"; ?>>
             </div>
 
             <div class="input-container">
                 <i class="fa-solid fa-lock"></i>
-                <input type="password" name="password" placeholder="Enter Password" required <?php if($blocked) echo "disabled"; ?>>
+                <input type="password" name="password" placeholder="Enter Password" required <?php if ($blocked)
+                    echo "disabled"; ?>>
             </div>
 
             <div class="captcha-container">
@@ -289,12 +417,15 @@ if (time() - $_SESSION['block_time'] < 30) {
             <div class="input-container">
                 <i class="fa-solid fa-shield-halved"></i>
                 <input type="hidden" name="captcha" id="captchaHidden">
-                <input type="text" name="captchaCode" placeholder="Enter Captcha" required <?php if($blocked) echo "disabled"; ?>>
+                <input type="text" name="captchaCode" placeholder="Enter Captcha" required <?php if ($blocked)
+                    echo "disabled"; ?>>
             </div>
 
             <div>
-                <input type="submit" value="Login" <?php if($blocked) echo "disabled"; ?>>
-                <input type="reset" value="Reset" <?php if($blocked) echo "disabled"; ?>>
+                <input type="submit" value="Login" <?php if ($blocked)
+                    echo "disabled"; ?>>
+                <input type="reset" value="Reset" <?php if ($blocked)
+                    echo "disabled"; ?>>
             </div>
         </form>
 
@@ -311,7 +442,7 @@ if (time() - $_SESSION['block_time'] < 30) {
         const refreshBtn = document.getElementById('refreshBtn');
 
         function generateCaptcha() {
-            const text = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ123456789";
+            const text = "abcdefghijkmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ123456789";
             let code = "";
             for (let i = 0; i < 5; i++) {
                 code += text[Math.floor(Math.random() * text.length)];
@@ -329,21 +460,22 @@ if (time() - $_SESSION['block_time'] < 30) {
 
         // ✅ Countdown for blocked state
         <?php if ($blocked): ?>
-        let remaining = <?php echo $remainingTime; ?>;
-        const timerElem = document.getElementById('timer');
-        const inputs = document.querySelectorAll('#loginForm input, #loginForm button');
+            let remaining = <?php echo $remainingTime; ?>;
+            const timerElem = document.getElementById('timer');
+            const inputs = document.querySelectorAll('#loginForm input, #loginForm button');
 
-        const countdown = setInterval(() => {
-            remaining--;
-            if (remaining <= 0) {
-                clearInterval(countdown);
-                timerElem.style.display = 'none';
-                inputs.forEach(inp => inp.disabled = false);
-            } else {
-                timerElem.innerText = `Try again in ${remaining} seconds`;
-            }
-        }, 1000);
+            const countdown = setInterval(() => {
+                remaining--;
+                if (remaining <= 0) {
+                    clearInterval(countdown);
+                    timerElem.style.display = 'none';
+                    inputs.forEach(inp => inp.disabled = false);
+                } else {
+                    timerElem.innerText = `Try again in ${remaining} seconds`;
+                }
+            }, 1000);
         <?php endif; ?>
     </script>
 </body>
+
 </html>

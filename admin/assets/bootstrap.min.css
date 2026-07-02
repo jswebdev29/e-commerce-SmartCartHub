@@ -727,7 +727,7 @@ progress {
   .container-sm,
   .container-xl,
   .container-xxl {
-    max-width: 1320px;
+    max-width: 1420px;
   }
 }
 :root {
@@ -2005,7 +2005,7 @@ progress {
   display: block;
   width: 100%;
   height: 26px;
-  margin: 5px;
+  margin-top: 5px;
   padding: 0.375rem 0.75rem;
   font-size: 1rem;
   font-weight: 400;
@@ -7870,6 +7870,7 @@ fieldset:disabled .btn {
 .my-5 {
   margin-top: 3rem !important;
   margin-bottom: 3rem !important;
+  margin-left: 60px !important;
 }
 .my-auto {
   margin-top: auto !important;
@@ -11739,10 +11740,7 @@ fieldset:disabled .btn {
 
 
 
-#carouselExampleAutoplaying
- {
-    margin-top: 95px !important;
-}
+
 
  .table tbody tr:hover {
         background-color: #85929c !important; 

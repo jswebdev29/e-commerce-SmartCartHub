@@ -134,7 +134,7 @@
     <i class="fa-solid fa-face-sad-tear icon"></i>
     <h1>404 - File Not Found</h1>
     <p>Oops! The page you're looking for doesn’t exist.</p>
-    <a href="index.html" class="btn"><i class="fa-solid fa-house"></i> Go Home</a>
+    <a href="index.php" class="btn"><i class="fa-solid fa-house"></i> Go Home</a>
   </div>
 
   <!-- Floating circles -->

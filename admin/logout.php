@@ -1,6 +1,14 @@
 <?php
 session_start();
-session_unset();
-session_destroy();
-header("Location: ../index.php");
+
+/* Admin sessions remove */
+unset($_SESSION['admin_username']);
+unset($_SESSION['LAST_ACTIVITY_ADMIN']);
+unset($_SESSION['CREATED_ADMIN']);
+unset($_SESSION['LOGIN_TIME_ADMIN']);
+
+session_regenerate_id(true);
+
+header("Location: index.php");
 exit();
+?>

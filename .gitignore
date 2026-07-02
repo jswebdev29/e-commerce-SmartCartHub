@@ -1,5 +1,6 @@
 .env
 node_modules/
 vendor/
+config.local.php
 .env
 node_modules/

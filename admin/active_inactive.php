@@ -1,21 +1,31 @@
 <?php
-$conn = new mysqli("localhost", "root", "", "ecommerce_db");
-if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
+require_once __DIR__ . '/../connectfinity.php';
+
+if (!isset($_GET['id'], $_GET['section'], $_GET['status'])) {
+    exit("error");
 }
 
-$id = intval($_GET['id']);
-$section = $_GET['section'] ?? 'boys'; // default boys
-$status = ($_GET['status'] === 'active') ? 'active' : 'inactive';
+$id = (int)$_GET['id'];
+$section = $_GET['section'];
+$status = ($_GET['status'] == 'active') ? 'active' : 'inactive';
 
-// Map section to table name
-$table = ($section === 'girls') ? "girls_product" : "boys_product";
+$allowed_tables = [
+    "boys_clothes",
+    "boys_shoes",
+    "boys_fashion_product",
+    "girls_clothes",
+    "girls_footwear",
+    "girls_fashion_product"
+];
 
-// Update status
-$conn->query("UPDATE $table SET status='$status' WHERE id=$id");
+if (!in_array($section, $allowed_tables)) {
+    exit("error");
+}
 
-header("Location: dashboard.php");
-exit();
+$sql = "UPDATE `$section` SET status='$status' WHERE id=$id";
 
-$conn->close();
-?>
+if ($conn->query($sql)) {
+    echo "success";
+} else {
+    echo "error";
+}
